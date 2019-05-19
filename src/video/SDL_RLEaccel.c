@@ -25,7 +25,7 @@
  *
  * Original version by Sam Lantinga
  *
- * Mattias Engdegård (Yorick): Rewrite. New encoding format, encoder and
+ * Mattias Engdegï¿½rd (Yorick): Rewrite. New encoding format, encoder and
  * decoder. Added per-surface alpha blitter. Added per-pixel alpha
  * format, encoder and blitter.
  *
@@ -83,13 +83,18 @@
  *
  *   The end of the sequence is marked by a zero <skip>,<run> pair at the
  *   beginning of an opaque line.
+ *
+ *   Modified by Bantukul Olarn for Urho3D
  */
 
 #include "SDL_video.h"
 #include "SDL_sysvideo.h"
 #include "SDL_blit.h"
 #include "SDL_RLEaccel_c.h"
+
+#ifndef __EMSCRIPTEN__ // Urho3D - exclude simd for emscripten
 #include "../cpuinfo/SDL_simd.h"
+#endif
 
 #ifndef MIN
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
@@ -1221,9 +1226,15 @@ RLEAlphaSurface(SDL_Surface * surface)
 
     /* Now that we have it encoded, release the original pixels */
     if (!(surface->flags & SDL_PREALLOC)) {
+#ifdef __EMSCRIPTEN__
+        SDL_free(surface->pixels);
+#else
         SDL_SIMDFree(surface->pixels);
+#endif
         surface->pixels = NULL;
+#ifndef __EMSCRIPTEN__
         surface->flags &= ~SDL_SIMD_ALIGNED;
+#endif
     }
 
     /* realloc the buffer to release unused memory */
@@ -1385,9 +1396,15 @@ RLEColorkeySurface(SDL_Surface * surface)
 
     /* Now that we have it encoded, release the original pixels */
     if (!(surface->flags & SDL_PREALLOC)) {
+#ifdef __EMSCRIPTEN__
+        SDL_free(surface->pixels);
+#else
         SDL_SIMDFree(surface->pixels);
+#endif
         surface->pixels = NULL;
+#ifndef __EMSCRIPTEN__
         surface->flags &= ~SDL_SIMD_ALIGNED;
+#endif
     }
 
     /* realloc the buffer to release unused memory */
@@ -1487,11 +1504,17 @@ UnRLEAlpha(SDL_Surface * surface)
         uncopy_opaque = uncopy_transl = uncopy_32;
     }
 
+#ifdef __EMSCRIPTEN__
+    surface->pixels = SDL_malloc(surface->h * surface->pitch);
+#else
     surface->pixels = SDL_SIMDAlloc(surface->h * surface->pitch);
+#endif
     if (!surface->pixels) {
         return (SDL_FALSE);
     }
+#ifndef __EMSCRIPTEN__
     surface->flags |= SDL_SIMD_ALIGNED;
+#endif
     /* fill background with transparent pixels */
     SDL_memset(surface->pixels, 0, surface->h * surface->pitch);
 
@@ -1553,13 +1576,19 @@ SDL_UnRLESurface(SDL_Surface * surface, int recode)
                 SDL_Rect full;
 
                 /* re-create the original surface */
+#ifdef __EMSCRIPTEN__
+                surface->pixels = SDL_malloc(surface->h * surface->pitch);
+#else
                 surface->pixels = SDL_SIMDAlloc(surface->h * surface->pitch);
+#endif
                 if (!surface->pixels) {
                     /* Oh crap... */
                     surface->flags |= SDL_RLEACCEL;
                     return;
                 }
+#ifndef __EMSCRIPTEN__
                 surface->flags |= SDL_SIMD_ALIGNED;
+#endif
 
                 /* fill it with the background color */
                 SDL_FillRect(surface, NULL, surface->map->info.colorkey);

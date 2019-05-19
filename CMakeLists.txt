@@ -342,14 +342,16 @@ set(SDL_STATIC ON CACHE BOOL "Build a static version of the library")
 dep_option(SDL_STATIC_PIC      "Static version of the library should be built with Position Independent Code" OFF "SDL_STATIC" OFF)
 
 # General source files
-set (SOURCE_FILE_PATTERNS
+set (
+  SOURCE_FILE_PATTERNS
   ${SDL2_SOURCE_DIR}/src/*.c
   ${SDL2_SOURCE_DIR}/src/atomic/*.c
 # Urho3D - we always disable dynamic API, so commented out ${SDL2_SOURCE_DIR}/src/dynapi/*.c
   ${SDL2_SOURCE_DIR}/src/libm/*.c
   ${SDL2_SOURCE_DIR}/src/stdlib/*.c
   ${SDL2_SOURCE_DIR}/src/thread/*.c
-  ${SDL2_SOURCE_DIR}/src/timer/*.c)
+  ${SDL2_SOURCE_DIR}/src/timer/*.c
+)
 # Urho3D - exclude source files from disabled subsystems, except SDL_ATOMIC, SDL_THREADS and SDL_TIMERS as SDL always needs them even when they may be just generic or dummy implementations
 foreach (_SUB AUDIO CPUINFO EVENTS FILE HAPTIC JOYSTICK POWER RENDER VIDEO)
   string (TOLOWER ${_SUB} _DIR)
@@ -359,6 +361,12 @@ foreach (_SUB AUDIO CPUINFO EVENTS FILE HAPTIC JOYSTICK POWER RENDER VIDEO)
 endforeach ()
 if (SDL_RENDER)
   list (APPEND SOURCE_FILE_PATTERNS ${SDL2_SOURCE_DIR}/src/render/*/*.c)   # Recurse one more level
+endif ()
+if (SDL_VIDEO) # Added video/yuv2rgb (Bantukul Olarn)
+  list (APPEND SOURCE_FILE_PATTERNS ${SDL2_SOURCE_DIR}/src/video/yuv2rgb/*.c)
+endif ()
+if (SDL_CPUINFO) # Add sdl_simd.h as source because SDL_surface.c & co. requires it (Bantukul Olarn)
+  list (APPEND SOURCE_FILE_PATTERNS ${SDL2_SOURCE_DIR}/src/cpuinfo/SDL_simd.h)
 endif ()
 file(GLOB SOURCE_FILES ${SOURCE_FILE_PATTERNS})
 
