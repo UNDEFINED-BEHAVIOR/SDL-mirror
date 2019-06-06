@@ -48,7 +48,23 @@
 
 # Urho3D - commented out setting SDL2 as project name as we want SDL sub-library to remain within Urho3D "umbrella" project
 #          instead, just enable the required language support and set the extra variables associated with project() command
-enable_language (C)
+if(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_BINARY_DIR})
+  message(FATAL_ERROR "Prevented in-tree built. Please create a build directory outside of the SDL source code and call cmake from there")
+endif()
+
+cmake_minimum_required(VERSION 2.8.11)
+project(SDL2 C CXX)
+
+# !!! FIXME: this should probably do "MACOSX_RPATH ON" as a target property
+# !!! FIXME:  for the SDL2 shared library (so you get an
+# !!! FIXME:  install_name ("soname") of "@rpath/libSDL-whatever.dylib"
+# !!! FIXME:  instead of "/usr/local/lib/libSDL-whatever.dylib"), but I'm
+# !!! FIXME:  punting for now and leaving the existing behavior. Until this
+# !!! FIXME:  properly resolved, this line silences a warning in CMake 3.0+.
+# !!! FIXME:  remove it and this comment entirely once the problem is
+# !!! FIXME:  properly resolved.
+#cmake_policy(SET CMP0042 OLD)
+
 set (SDL2_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set (SDL2_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR})
 # Urho3D - commented out CheckTypeSize, FindPkgConfig, and GNUInstallDirs modules as the corresponding macros are not being used in our modified version
@@ -782,7 +798,15 @@ if(ANDROID)
       message(STATUS "Vulkan doesn't work on this configuration")
     endif()
   endif()
-elseif(EMSCRIPTEN)
+
+  file(GLOB ANDROID_HIDAPI_SOURCES ${SDL2_SOURCE_DIR}/src/hidapi/android/*.cpp)
+
+  CheckPTHREAD()
+
+endif()
+
+# Platform-specific options and settings
+if(EMSCRIPTEN)
   # Hide noisy warnings that intend to aid mostly during initial stages of porting a new
   # project. Uncomment at will for verbose cross-compiling -I/../ path info.
   add_definitions(-Wno-warn-absolute-paths)
@@ -1545,6 +1569,44 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${EXTRA_CFLAGS}")
 
 # Define target name
 set (TARGET_NAME SDL)
+if(ANDROID)
+  add_library(hidapi SHARED ${ANDROID_HIDAPI_SOURCES})
+  if(MSVC AND NOT LIBC)
+    # Don't try to link with the default set of libraries.
+    set_target_properties(hidapi PROPERTIES LINK_FLAGS_RELEASE "/NODEFAULTLIB")
+    set_target_properties(hidapi PROPERTIES LINK_FLAGS_DEBUG "/NODEFAULTLIB")
+    set_target_properties(hidapi PROPERTIES STATIC_LIBRARY_FLAGS "/NODEFAULTLIB")
+  endif()
+  target_link_libraries(hidapi log)
+endif()
+
+if(SDL_STATIC)
+  set (BUILD_SHARED_LIBS FALSE)
+  add_library(SDL2-static STATIC ${SOURCE_FILES})
+  if (NOT SDL_SHARED OR NOT WIN32)
+    set_target_properties(SDL2-static PROPERTIES OUTPUT_NAME "SDL2")
+    # Note: Apparently, OUTPUT_NAME must really be unique; even when
+    # CMAKE_IMPORT_LIBRARY_SUFFIX or the like are given. Otherwise
+    # the static build may race with the import lib and one will get
+    # clobbered, when the suffix is realized via subsequent rename.
+  endif()
+  set_target_properties(SDL2-static PROPERTIES POSITION_INDEPENDENT_CODE ${SDL_STATIC_PIC})
+  if(MSVC AND NOT LIBC)
+    set_target_properties(SDL2-static PROPERTIES LINK_FLAGS_RELEASE "/NODEFAULTLIB")
+    set_target_properties(SDL2-static PROPERTIES LINK_FLAGS_DEBUG "/NODEFAULTLIB")
+    set_target_properties(SDL2-static PROPERTIES STATIC_LIBRARY_FLAGS "/NODEFAULTLIB")
+  endif()
+  # TODO: Win32 platforms keep the same suffix .lib for import and static
+  # libraries - do we need to consider this?
+  set(_INSTALL_LIBS "SDL2-static" ${_INSTALL_LIBS})
+  target_link_libraries(SDL2-static ${EXTRA_LIBS} ${EXTRA_LDFLAGS})
+  target_include_directories(SDL2-static PUBLIC "$<BUILD_INTERFACE:${SDL2_SOURCE_DIR}/include>" $<INSTALL_INTERFACE:include/SDL2>)
+  if (NOT ANDROID)
+    set_target_properties(SDL2-static PROPERTIES DEBUG_POSTFIX ${SDL_CMAKE_DEBUG_POSTFIX})
+  endif()
+endif()
+
+##### Tests #####
 
 # Define source files
 file (GLOB H_FILES include/*.h)     # Adding the headers into source files list is just for easier file browsing in the IDE
@@ -1553,6 +1615,88 @@ list (APPEND SOURCE_FILES ${H_FILES})
 # Setup target as STATIC library (as the result we never use EXTRA_LDFLAGS linker flags)
 setup_library ()
 
-# Install headers for building and using the Urho3D library (install dependency for InputEvents.h)
-install_header_files (DIRECTORY include/ DESTINATION ${DEST_INCLUDE_DIR}/ThirdParty/SDL FILES_MATCHING PATTERN *.h USE_FILE_SYMLINK)    # Note: the trailing slash is significant
-install_header_files (FILES ${SDL2_BINARY_DIR}/include/generated/SDL_config.h DESTINATION ${DEST_INCLUDE_DIR}/ThirdParty/SDL)
+##### Installation targets #####
+install(TARGETS ${_INSTALL_LIBS} EXPORT SDL2Targets
+  LIBRARY DESTINATION "lib${LIB_SUFFIX}"
+  ARCHIVE DESTINATION "lib${LIB_SUFFIX}"
+  RUNTIME DESTINATION bin)
+
+##### Export files #####
+if (APPLE)
+  set(PKG_PREFIX "SDL2.framework/Resources")
+elseif (WINDOWS)
+  set(PKG_PREFIX "cmake")
+else ()
+  set(PKG_PREFIX "lib/cmake/SDL2")
+endif ()
+
+include(CMakePackageConfigHelpers)
+write_basic_package_version_file("${CMAKE_BINARY_DIR}/SDL2ConfigVersion.cmake"
+  VERSION ${SDL_VERSION}
+  COMPATIBILITY AnyNewerVersion
+)
+
+install(EXPORT SDL2Targets
+  FILE SDL2Targets.cmake
+  NAMESPACE SDL2::
+  DESTINATION ${PKG_PREFIX}
+)
+install(
+  FILES
+    ${CMAKE_CURRENT_SOURCE_DIR}/SDL2Config.cmake
+    ${CMAKE_BINARY_DIR}/SDL2ConfigVersion.cmake
+  DESTINATION ${PKG_PREFIX}
+  COMPONENT Devel
+)
+
+file(GLOB INCLUDE_FILES ${SDL2_SOURCE_DIR}/include/*.h)
+file(GLOB BIN_INCLUDE_FILES ${SDL2_BINARY_DIR}/include/*.h)
+foreach(_FNAME ${BIN_INCLUDE_FILES})
+  get_filename_component(_INCNAME ${_FNAME} NAME)
+  list(REMOVE_ITEM INCLUDE_FILES ${SDL2_SOURCE_DIR}/include/${_INCNAME})
+endforeach()
+list(APPEND INCLUDE_FILES ${BIN_INCLUDE_FILES})
+install(FILES ${INCLUDE_FILES} DESTINATION include/SDL2)
+
+string(TOUPPER "${CMAKE_BUILD_TYPE}" UPPER_BUILD_TYPE)
+if (UPPER_BUILD_TYPE MATCHES DEBUG)
+  set(SOPOSTFIX "${SDL_CMAKE_DEBUG_POSTFIX}")
+else()
+  set(SOPOSTFIX "")
+endif()
+
+if(NOT (WINDOWS OR CYGWIN))
+  if(SDL_SHARED)
+    set(SOEXT ${CMAKE_SHARED_LIBRARY_SUFFIX}) # ".so", ".dylib", etc.
+    get_target_property(SONAME SDL2 OUTPUT_NAME)
+    if(NOT ANDROID)
+        install(CODE "
+          execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink
+            \"lib${SONAME}${SOPOSTFIX}${SOEXT}\" \"libSDL2${SOPOSTFIX}${SOEXT}\"
+            WORKING_DIRECTORY \"${SDL2_BINARY_DIR}\")")
+        install(FILES ${SDL2_BINARY_DIR}/libSDL2${SOPOSTFIX}${SOEXT} DESTINATION "lib${LIB_SUFFIX}")
+    endif()
+  endif()
+  if(FREEBSD)
+    # FreeBSD uses ${PREFIX}/libdata/pkgconfig
+    install(FILES ${SDL2_BINARY_DIR}/sdl2.pc DESTINATION "libdata/pkgconfig")
+  else()
+    install(FILES ${SDL2_BINARY_DIR}/sdl2.pc
+      DESTINATION "lib${LIB_SUFFIX}/pkgconfig")
+  endif()
+  install(PROGRAMS ${SDL2_BINARY_DIR}/sdl2-config DESTINATION bin)
+  # TODO: what about the .spec file? Is it only needed for RPM creation?
+  install(FILES "${SDL2_SOURCE_DIR}/sdl2.m4" DESTINATION "${CMAKE_INSTALL_FULL_DATAROOTDIR}/aclocal")
+endif()
+
+##### Uninstall target #####
+
+if(NOT TARGET uninstall)
+  configure_file(
+      "${CMAKE_CURRENT_SOURCE_DIR}/cmake_uninstall.cmake.in"
+      "${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake"
+      IMMEDIATE @ONLY)
+
+  add_custom_target(uninstall
+      COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake)
+endif()

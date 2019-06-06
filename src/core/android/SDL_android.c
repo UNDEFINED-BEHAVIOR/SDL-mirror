@@ -45,6 +45,7 @@
 #include "../../haptic/android/SDL_syshaptic_c.h"
 
 #include <android/log.h>
+#include <sys/system_properties.h>
 #include <pthread.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -99,6 +100,9 @@ JNIEXPORT void JNICALL SDL_JAVA_INTERFACE(onNativeKeyDown)(
 JNIEXPORT void JNICALL SDL_JAVA_INTERFACE(onNativeKeyUp)(
         JNIEnv *env, jclass jcls,
         jint keycode);
+
+JNIEXPORT jboolean JNICALL SDL_JAVA_INTERFACE(onNativeSoftReturnKey)(
+        JNIEnv *env, jclass jcls);
 
 JNIEXPORT void JNICALL SDL_JAVA_INTERFACE(onNativeKeyboardFocusLost)(
         JNIEnv *env, jclass jcls);
@@ -949,6 +953,17 @@ JNIEXPORT void JNICALL SDL_JAVA_INTERFACE(onNativeKeyUp)(
     Android_OnKeyUp(keycode);
 }
 
+/* Virtual keyboard return key might stop text input */
+JNIEXPORT jboolean JNICALL SDL_JAVA_INTERFACE(onNativeSoftReturnKey)(
+                                    JNIEnv *env, jclass jcls)
+{
+    if (SDL_GetHintBoolean(SDL_HINT_RETURN_KEY_HIDES_IME, SDL_FALSE)) {
+        SDL_StopTextInput();
+        return JNI_TRUE;
+    }
+    return JNI_FALSE;
+}
+
 /* Keyboard Focus Lost */
 JNIEXPORT void JNICALL SDL_JAVA_INTERFACE(onNativeKeyboardFocusLost)(
                                     JNIEnv *env, jclass jcls)
@@ -1163,7 +1178,6 @@ JNIEXPORT void JNICALL SDL_JAVA_INTERFACE_INPUT_CONNECTION(nativeGenerateScancod
         SDL_SendKeyboardKey(SDL_RELEASED, SDL_SCANCODE_LSHIFT);
     }
 }
-
 
 JNIEXPORT void JNICALL SDL_JAVA_INTERFACE_INPUT_CONNECTION(nativeSetComposingText)(
                                     JNIEnv *env, jclass cls,
@@ -2540,6 +2554,18 @@ void *SDL_AndroidGetActivity(void)
 
     /* return SDLActivity.getContext(); */
     return (*env)->CallStaticObjectMethod(env, mActivityClass, midGetContext);
+}
+
+int SDL_GetAndroidSDKVersion(void)
+{
+    static int sdk_version;
+    if (!sdk_version) {
+        char sdk[PROP_VALUE_MAX] = {0};
+        if (__system_property_get("ro.build.version.sdk", sdk) != 0) {
+            sdk_version = SDL_atoi(sdk);
+        }
+    }
+    return sdk_version;
 }
 
 SDL_bool SDL_IsAndroidTablet(void)
