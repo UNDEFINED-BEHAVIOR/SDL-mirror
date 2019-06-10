@@ -1438,8 +1438,8 @@ endif()
 # endif()
 
 # Urho3D - use 'generated' path suffix for generated config header file (need the suffix as we support both out-of-source in-source build tree)
-configure_file("${SDL2_SOURCE_DIR}/include/SDL_config.h.cmake"
-  "${SDL2_BINARY_DIR}/include/generated/SDL_config.h")
+configure_file("${SDL2_SOURCE_DIR}/include/SDL/SDL_config.h.cmake"
+  "${SDL2_BINARY_DIR}/include/SDL/generated/SDL_config.h")
 
 # Prepare the flags and remove duplicates
 if(EXTRA_LDFLAGS)
@@ -1551,8 +1551,36 @@ file (GLOB H_FILES include/*.h)     # Adding the headers into source files list 
 list (APPEND SOURCE_FILES ${H_FILES})
 
 # Setup target as STATIC library (as the result we never use EXTRA_LDFLAGS linker flags)
-setup_library ()
+add_library (SDL STATIC ${SOURCE_FILES})
+
+# General includes
+# Urho3D - use 'generated' path suffix for generated config header file, the suffic prevents overwriting the header file with the same name in the source tree in case of non out-of-source build tree is being used
+target_include_directories (SDL
+    PUBLIC $<BUILD_INTERFACE:${SDL2_BINARY_DIR}/include/SDL/generated>
+           $<BUILD_INTERFACE:${SDL2_SOURCE_DIR}/include/SDL>
+           $<BUILD_INTERFACE:${SDL2_SOURCE_DIR}/include>
+)
+if (BUILD_SHARED_LIBS)
+  target_compile_definitions(SDL PRIVATE -DSDL_EXPORTS)
+endif ()
+if (WIN32)
+  target_link_libraries (SDL user32 gdi32 imm32 version winmm)
+elseif (ANDROID)
+  target_link_libraries (SDL dl log android)
+elseif (APPLE)
+  target_compile_options(SDL PUBLIC -stdlib=libc++)
+  target_link_libraries (SDL iconv "-framework AudioToolbox" "-framework CoreAudio")
+  if (ARM)
+    target_link_libraries (SDL "-framework AVFoundation" "-framework CoreGraphics" "-framework CoreMotion" "-framework GameController" "-framework OpenGLES" "-framework QuartzCore" "-framework UIKit")
+  else ()
+    target_link_libraries (SDL "-framework Carbon" "-framework Cocoa" "-framework CoreFoundation" "-framework SystemConfiguration" "-framework CoreServices" "-framework CoreVideo" "-framework ForceFeedback" "-framework IOKit" "-framework OpenGL")
+  endif ()
+endif ()
 
 # Install headers for building and using the Urho3D library (install dependency for InputEvents.h)
-install_header_files (DIRECTORY include/ DESTINATION ${DEST_INCLUDE_DIR}/ThirdParty/SDL FILES_MATCHING PATTERN *.h USE_FILE_SYMLINK)    # Note: the trailing slash is significant
-install_header_files (FILES ${SDL2_BINARY_DIR}/include/generated/SDL_config.h DESTINATION ${DEST_INCLUDE_DIR}/ThirdParty/SDL)
+install (DIRECTORY include/ DESTINATION ${DEST_THIRDPARTY_HEADERS_DIR}/ FILES_MATCHING PATTERN *.h)    # Note: the trailing slash is significant
+install (FILES ${SDL2_BINARY_DIR}/include/SDL/generated/SDL_config.h DESTINATION ${DEST_THIRDPARTY_HEADERS_DIR}/SDL)
+
+if (NOT URHO3D_MERGE_STATIC_LIBS)
+  install(TARGETS SDL EXPORT Urho3D ARCHIVE DESTINATION ${DEST_ARCHIVE_DIR})
+endif ()
