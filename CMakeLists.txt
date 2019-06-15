@@ -924,6 +924,16 @@ elseif(APPLE)
     list(APPEND EXTRA_LIBS ${AUDIOTOOLBOX})
   endif()
 
+  # Urho3d - sync with SDL_config_iphoneos.h
+  if (SDL_SENSOR)
+    if (IOS)
+      set(SDL_SENSOR_ANDROID 1)
+      set(HAVE_SDL_SENSORS TRUE)
+      file(GLOB COREMOTION_SOURCES ${SDL2_SOURCE_DIR}/src/sensor/coremotion/*.m)
+      set(SOURCE_FILES ${SOURCE_FILES} ${COREMOTION_SOURCES})
+    endif ()
+  endif ()
+
   # Urho3d - bug fix - make it work for iOS/tvOS platform
   if(SDL_VIDEO)
     if (VIDEO_COCOA)
@@ -944,6 +954,22 @@ elseif(APPLE)
       set (SDL_VIDEO_RENDER_OGL_ES 1)
       set (SDL_VIDEO_RENDER_OGL_ES2 1)
       set (HAVE_VIDEO_OPENGLES TRUE)
+
+      # Urho3D - Metal supported on 64-bit devices running iOS 8.0 and tvOS 9.0 and newer
+      CHECK_C_SOURCE_COMPILES ("
+      #if (__IPHONE_OS_VERSION_MIN_REQUIRED < 80000) || (__TV_OS_VERSION_MIN_REQUIRED < 90000)
+      #error Metal doesn't work on this target platform
+      #endif
+      int main()
+      {
+          return 0;
+      }
+      " PASSED_METAL_CHECKS)
+      if (PASSED_METAL_CHECKS)
+        set (SDL_VIDEO_RENDER_METAL 1)
+      else ()
+        set (VIDEO_VULKAN OFF)
+      endif ()
     else ()
       CheckOpenGL ()
       CheckOpenGLES ()
