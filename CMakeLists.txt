@@ -756,15 +756,14 @@ if(ANDROID)
     endif()
   endif()
 
+  # Urho3D - import 'cpufeatures' from Android NDK
+  if (SDL_CPUINFO)
+    # This is a hack - intentionally do not depend on the 'cpufeatures' as separate built target with android_ndk_import_module_cpufeatures macro from NDK
+    list (APPEND INCLUDE_DIRS ${ANDROID_NDK}/sources/android/cpufeatures)
+    list (APPEND SOURCE_FILES ${ANDROID_NDK}/sources/android/cpufeatures/cpu-features.c)
+  endif ()
+
   file(GLOB ANDROID_HIDAPI_SOURCES ${SDL2_SOURCE_DIR}/src/hidapi/android/*.cpp)
-  add_library(hidapi SHARED ${ANDROID_HIDAPI_SOURCES})
-  if(MSVC AND NOT LIBC)
-    # Don't try to link with the default set of libraries.
-    set_target_properties(hidapi PROPERTIES LINK_FLAGS_RELEASE "/NODEFAULTLIB")
-    set_target_properties(hidapi PROPERTIES LINK_FLAGS_DEBUG "/NODEFAULTLIB")
-    set_target_properties(hidapi PROPERTIES STATIC_LIBRARY_FLAGS "/NODEFAULTLIB")
-  endif()
-  target_link_libraries(hidapi log)
 elseif(EMSCRIPTEN)
   # Hide noisy warnings that intend to aid mostly during initial stages of porting a new
   # project. Uncomment at will for verbose cross-compiling -I/../ path info.
@@ -1566,3 +1565,16 @@ setup_library ()
 # Install headers for building and using the Urho3D library (install dependency for InputEvents.h)
 install_header_files (DIRECTORY include/ DESTINATION ${DEST_INCLUDE_DIR}/ThirdParty/SDL FILES_MATCHING PATTERN *.h USE_FILE_SYMLINK)    # Note: the trailing slash is significant
 install_header_files (FILES ${SDL2_BINARY_DIR}/include/generated/SDL_config.h DESTINATION ${DEST_INCLUDE_DIR}/ThirdParty/SDL)
+
+if (ANDROID)
+  add_library(hidapi SHARED ${ANDROID_HIDAPI_SOURCES})
+  if(MSVC AND NOT LIBC)
+    # Don't try to link with the default set of libraries.
+    set_target_properties(hidapi PROPERTIES LINK_FLAGS_RELEASE "/NODEFAULTLIB")
+    set_target_properties(hidapi PROPERTIES LINK_FLAGS_DEBUG "/NODEFAULTLIB")
+    set_target_properties(hidapi PROPERTIES STATIC_LIBRARY_FLAGS "/NODEFAULTLIB")
+  endif()
+  target_link_libraries(hidapi log)
+  # Urho3D - ensure hidapi is built automatically first before SDL
+  add_dependencies (SDL hidapi)
+endif ()
