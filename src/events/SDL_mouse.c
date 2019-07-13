@@ -341,6 +341,13 @@ SDL_PrivateSendMouseMotion(SDL_Window * window, SDL_MouseID mouseID, int relativ
         }
     }
 
+    /* SDL_HINT_TOUCH_MOUSE_EVENTS: if not set, discard synthetic mouse events coming from platform layer */
+    if (mouse->touch_mouse_events == 0) {
+        if (mouseID == SDL_TOUCH_MOUSEID) {
+            return 0;
+        }
+    }
+
     if (mouseID != SDL_TOUCH_MOUSEID && mouse->relative_mode_warp) {
         int center_x = 0, center_y = 0;
         SDL_GetWindowSize(window, &center_x, &center_y);
@@ -386,13 +393,11 @@ SDL_PrivateSendMouseMotion(SDL_Window * window, SDL_MouseID mouseID, int relativ
         mouse->has_position = SDL_TRUE;
     }
 
-#ifndef __MACOSX__  /* all your trackpad input would lack relative motion when not dragging in this case. */
     /* Ignore relative motion positioning the first touch */
     if (mouseID == SDL_TOUCH_MOUSEID && !mouse->buttonstate) {
         xrel = 0;
         yrel = 0;
     }
-#endif
 
     /* Update internal mouse coordinates */
     if (!mouse->relative_mode) {
@@ -501,6 +506,13 @@ SDL_PrivateSendMouseButton(SDL_Window * window, SDL_MouseID mouseID, Uint8 state
                 float fy = (float)mouse->y / (float)window->h;
                 SDL_SendTouch(SDL_MOUSE_TOUCHID, 0, track_mouse_down, fx, fy, 1.0f);
             }
+        }
+    }
+
+    /* SDL_HINT_TOUCH_MOUSE_EVENTS: if not set, discard synthetic mouse events coming from platform layer */
+    if (mouse->touch_mouse_events == 0) {
+        if (mouseID == SDL_TOUCH_MOUSEID) {
+            return 0;
         }
     }
 

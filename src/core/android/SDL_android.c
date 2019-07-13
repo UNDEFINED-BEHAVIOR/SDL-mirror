@@ -27,6 +27,7 @@
 #include "SDL_hints.h"
 #include "SDL_log.h"
 #include "SDL_main.h"
+#include "SDL_timer.h"
 
 #ifdef __ANDROID__
 
@@ -298,6 +299,9 @@ static float fLastAccelerometer[3];
 static SDL_bool bHasNewData;
 
 static SDL_bool bHasEnvironmentVariables = SDL_FALSE;
+// Urho3D: application files dir
+static char* mFilesDir = 0;
+
 // Urho3D: application files dir
 static char* mFilesDir = 0;
 
@@ -750,6 +754,25 @@ void Android_ActivityMutex_Lock() {
 
 void Android_ActivityMutex_Unlock() {
     SDL_UnlockMutex(Android_ActivityMutex);
+}
+
+/* Lock the Mutex when the Activity is in its 'Running' state */
+void Android_ActivityMutex_Lock_Running() {
+    int pauseSignaled = 0;
+    int resumeSignaled = 0;
+
+retry:
+
+    SDL_LockMutex(Android_ActivityMutex);
+
+    pauseSignaled = SDL_SemValue(Android_PauseSem);
+    resumeSignaled = SDL_SemValue(Android_ResumeSem);
+
+    if (pauseSignaled > resumeSignaled) {
+        SDL_UnlockMutex(Android_ActivityMutex);
+        SDL_Delay(50);
+        goto retry;
+    }
 }
 
 /* Set screen resolution */

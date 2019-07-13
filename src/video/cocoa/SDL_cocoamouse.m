@@ -379,14 +379,6 @@ Cocoa_HandleMouseEvent(_THIS, NSEvent *event)
     }
 
     SDL_MouseID mouseID = mouse ? mouse->mouseID : 0;
-    if ([event subtype] == NSEventSubtypeTouch) {  /* this is a synthetic from the OS */
-        if (mouse->touch_mouse_events) {
-            mouseID = SDL_TOUCH_MOUSEID;   /* Hint is set */
-        } else {
-            return;  /* no hint set, drop this one. */
-        }
-    }
-
     const SDL_bool seenWarp = driverdata->seenWarp;
     driverdata->seenWarp = NO;
 
@@ -432,14 +424,6 @@ Cocoa_HandleMouseWheel(SDL_Window *window, NSEvent *event)
     }
 
     SDL_MouseID mouseID = mouse->mouseID;
-    if ([event subtype] == NSEventSubtypeTouch) {  /* this is a synthetic from the OS */
-        if (mouse->touch_mouse_events) {
-            mouseID = SDL_TOUCH_MOUSEID;   /* Hint is set */
-        } else {
-            return;  /* no hint set, drop this one. */
-        }
-    }
-
     CGFloat x = -[event deltaX];
     CGFloat y = [event deltaY];
     SDL_MouseWheelDirection direction = SDL_MOUSEWHEEL_NORMAL;

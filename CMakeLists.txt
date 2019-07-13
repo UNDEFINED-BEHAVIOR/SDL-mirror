@@ -158,6 +158,20 @@ if(UNIX OR MINGW OR MSYS)
   set(OPT_DEF_LIBC ON)
 endif()
 
+# The hidraw support doesn't catch Xbox, PS4 and Nintendo controllers,
+#  so we'll just use libusb when it's available. Except that libusb
+#  requires root permissions to open devices, so that's not generally
+#  useful, and we'll disable this by default on Unix. Windows and macOS
+#  can use it without root access, though, so enable by default there.
+if(WINDOWS OR APPLE OR ANDROID)
+  set(HIDAPI_SKIP_LIBUSB TRUE)
+else()
+  set(HIDAPI_SKIP_LIBUSB FALSE)
+endif()
+if (HIDAPI_SKIP_LIBUSB)
+  set(OPT_DEF_HIDAPI ON)
+endif()
+
 # Compiler info
 if(CMAKE_COMPILER_IS_GNUCC)
   set(USE_GCC TRUE)
@@ -231,6 +245,10 @@ endif()
 # Urho3D - we always build internal sub-libraries as STATIC library type, so this build option is not applicable to us
 set (SDL_STATIC_ENABLED_BY_DEFAULT ON)
 set (SDL_SHARED_ENABLED_BY_DEFAULT OFF)
+# Urho3D - bug fix - add compiler defined expected by SDL.c when building STATIC librabry type
+if (WINDOWS)
+    add_definitions (-DSDL_STATIC_LIB)
+endif ()
 # Urho3D - we prefer to disable 2D render subsystem by default
 if (NOT DEFINED SDL_RENDER_ENABLED_BY_DEFAULT)
     set (SDL_RENDER_ENABLED_BY_DEFAULT OFF)
@@ -336,6 +354,7 @@ dep_option(VIDEO_KMSDRM        "Use KMS DRM video driver" ON UNIX_SYS OFF)
 dep_option(KMSDRM_SHARED       "Dynamically load KMS DRM support" ON VIDEO_KMSDRM OFF)
 option_string(BACKGROUNDING_SIGNAL "number to use for magic backgrounding signal or 'OFF'" OFF)
 option_string(FOREGROUNDING_SIGNAL "number to use for magic foregrounding signal or 'OFF'" OFF)
+set_option(HIDAPI              "Use HIDAPI for low level joystick drivers" ${OPT_DEF_HIDAPI})
 
 set(SDL_SHARED ${SDL_SHARED_ENABLED_BY_DEFAULT} CACHE BOOL "Build a shared version of the library")
 set(SDL_STATIC ${SDL_STATIC_ENABLED_BY_DEFAULT} CACHE BOOL "Build a static version of the library")
@@ -703,6 +722,11 @@ if(ANDROID)
     set(HAVE_SDL_HAPTIC TRUE)
   endif()
   if(SDL_JOYSTICK)
+    CheckHIDAPI()
+    # Urho3D - get the cue from how the hidapi is setup on other platforms
+    if (HAVE_HIDAPI)
+      list (APPEND SOURCE_FILES ${SDL2_SOURCE_DIR}/src/hidapi/android/hid.cpp)
+    endif ()
     set(SDL_JOYSTICK_ANDROID 1)
     file(GLOB ANDROID_JOYSTICK_SOURCES ${SDL2_SOURCE_DIR}/src/joystick/android/*.c ${SDL2_SOURCE_DIR}/src/joystick/steam/*.c)
     set(SOURCE_FILES ${SOURCE_FILES} ${ANDROID_JOYSTICK_SOURCES})
@@ -837,6 +861,15 @@ elseif(APPLE)
   endif()
 
   if(SDL_JOYSTICK)
+    CheckHIDAPI()
+    # Urho3D - bug fix - make it work for iOS/tvOS platform
+    if(HAVE_HIDAPI)
+      if(IOS OR TVOS)
+        set(SOURCE_FILES ${SOURCE_FILES} ${SDL2_SOURCE_DIR}/src/hidapi/ios/hid.m)
+      else()
+        set(SOURCE_FILES ${SOURCE_FILES} ${SDL2_SOURCE_DIR}/src/hidapi/mac/hid.c)
+      endif()
+    endif()
     # Urho3D - bug fix - make it work for iOS/tvOS platform
     if (IOS OR TVOS)
       set (SDL_JOYSTICK_MFI 1)
@@ -848,7 +881,6 @@ elseif(APPLE)
       set(SDL_FRAMEWORK_FF 1)
     endif ()
     set(SOURCE_FILES ${SOURCE_FILES} ${JOYSTICK_SOURCES})
-    set_source_files_properties(${JOYSTICK_SOURCES} PROPERTIES LANGUAGE C)
     set(HAVE_SDL_JOYSTICK TRUE)
   endif()
 
@@ -925,7 +957,7 @@ elseif(APPLE)
 
   # Urho3d - sync with SDL_config_iphoneos.h
   if (SDL_SENSOR)
-    if (IOS)
+    if (IOS)    # Intentionally do not let tvOS to go into the block
       set(SDL_SENSOR_COREMOTION 1)
       set(HAVE_SDL_SENSORS TRUE)
       file(GLOB COREMOTION_SOURCES ${SDL2_SOURCE_DIR}/src/sensor/coremotion/*.m)
@@ -1149,16 +1181,6 @@ elseif(UNIX)    # Urho3D - at this point both UNIX and UNIX_SYS should be equiva
       set(SOURCE_FILES ${SOURCE_FILES} ${POWER_SOURCES})
       set(HAVE_SDL_POWER TRUE)
     endif()
-    if(SDL_JOYSTICK)
-      set(SDL_JOYSTICK_LINUX 1)
-      file(GLOB JOYSTICK_SOURCES ${SDL2_SOURCE_DIR}/src/joystick/linux/*.c ${SDL2_SOURCE_DIR}/src/joystick/steam/*.c)
-      set(SOURCE_FILES ${SOURCE_FILES} ${JOYSTICK_SOURCES})
-      set(HAVE_SDL_JOYSTICK TRUE)
-    endif()
-  else ()
-    if(SDL_JOYSTICK)
-      CheckUSBHID()   # seems to be BSD specific - limit the test to BSD only?
-    endif()
   endif()
 
   if(INPUT_TSLIB)
@@ -1177,6 +1199,25 @@ elseif(UNIX)    # Urho3D - at this point both UNIX and UNIX_SYS should be equiva
       list(APPEND EXTRA_LIBS ts)
     endif()
     set (CMAKE_REQUIRED_INCLUDES ${CMAKE_REQUIRED_INCLUDES_TSLIB_SAVED})
+  endif()
+
+  if(SDL_JOYSTICK)
+    CheckUSBHID()   # seems to be BSD specific - limit the test to BSD only?
+    CheckHIDAPI()
+    if(LINUX)
+      # Urho3D - get the cue from how the hidapi is setup on other platforms
+      if (HAVE_HIDAPI)
+        list (APPEND SOURCE_FILES ${SDL2_SOURCE_DIR}/src/hidapi/linux/hid.c ${SDL2_SOURCE_DIR}/src/hidapi/linux/hid.cpp ${SDL2_SOURCE_DIR}/src/hidapi/linux/hidraw.cpp)
+      endif ()    
+      set(SDL_JOYSTICK_LINUX 1)
+      file(GLOB JOYSTICK_SOURCES ${SDL2_SOURCE_DIR}/src/joystick/linux/*.c ${SDL2_SOURCE_DIR}/src/joystick/steam/*.c)
+      set(SOURCE_FILES ${SOURCE_FILES} ${JOYSTICK_SOURCES})
+      set(HAVE_SDL_JOYSTICK TRUE)
+    endif()
+  else ()
+    if(SDL_JOYSTICK)
+      CheckUSBHID()   # seems to be BSD specific - limit the test to BSD only?
+    endif()
   endif()
 
   # Urho3D - move CLOCK_GETTIME detection logic to compiler option evaluation section above
@@ -1306,7 +1347,7 @@ elseif(WINDOWS)
   endif()
 
   # Libraries for Win32 native and MinGW
-  list(APPEND EXTRA_LIBS user32 gdi32 winmm imm32 ole32 oleaut32 version uuid advapi32 shell32)
+  list(APPEND EXTRA_LIBS user32 gdi32 winmm imm32 ole32 oleaut32 version uuid setupapi advapi32 shell32)
 
   # TODO: in configure.ac the check for timers is set on
   # cygwin | mingw32* - does this include mingw32CE?
@@ -1344,6 +1385,10 @@ elseif(WINDOWS)
   endif()
 
   if(SDL_JOYSTICK)
+    CheckHIDAPI()
+    if(HAVE_HIDAPI)
+      set(SOURCE_FILES ${SOURCE_FILES} ${SDL2_SOURCE_DIR}/src/hidapi/windows/hid.c)
+    endif()
     file(GLOB JOYSTICK_SOURCES ${SDL2_SOURCE_DIR}/src/joystick/windows/*.c)
     set(SOURCE_FILES ${SOURCE_FILES} ${JOYSTICK_SOURCES})
     if(HAVE_DINPUT_H)

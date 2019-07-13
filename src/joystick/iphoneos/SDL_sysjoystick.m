@@ -662,6 +662,7 @@ IOS_MFIJoystickUpdate(SDL_Joystick * joystick)
             if (joystick->hwdata->button_mask & (1 << SDL_CONTROLLER_BUTTON_START)) {
                 if (joystick->hwdata->uses_pause_handler) {
                     pause_button_index = button_count;
+                    buttons[button_count++] = joystick->delayed_guide_button;
                 } else {
                     buttons[button_count++] = gamepad.buttonMenu.isPressed;
                 }
@@ -697,6 +698,7 @@ IOS_MFIJoystickUpdate(SDL_Joystick * joystick)
             buttons[button_count++] = gamepad.leftShoulder.isPressed;
             buttons[button_count++] = gamepad.rightShoulder.isPressed;
             pause_button_index = button_count;
+            buttons[button_count++] = joystick->delayed_guide_button;
 
             hatstate = IOS_MFIJoystickHatStateForDPad(gamepad.dpad);
 
@@ -729,6 +731,7 @@ IOS_MFIJoystickUpdate(SDL_Joystick * joystick)
             if (joystick->hwdata->button_mask & (1 << SDL_CONTROLLER_BUTTON_START)) {
                 if (joystick->hwdata->uses_pause_handler) {
                     pause_button_index = button_count;
+                    buttons[button_count++] = joystick->delayed_guide_button;
                 } else {
                     buttons[button_count++] = gamepad.buttonMenu.isPressed;
                 }
