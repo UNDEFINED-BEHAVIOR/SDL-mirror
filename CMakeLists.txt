@@ -48,7 +48,7 @@
 
 # Urho3D - commented out setting SDL2 as project name as we want SDL sub-library to remain within Urho3D "umbrella" project
 #          instead, just enable the required language support and set the extra variables associated with project() command
-enable_language (C)
+enable_language (C CXX)
 set (SDL2_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set (SDL2_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR})
 # Urho3D - commented out CheckTypeSize, FindPkgConfig, and GNUInstallDirs modules as the corresponding macros are not being used in our modified version
@@ -76,15 +76,14 @@ include(${SDL2_SOURCE_DIR}/cmake/sdlchecks.cmake)
 # set SDL_BINARY_AGE and SDL_INTERFACE_AGE to 0.
 set(SDL_MAJOR_VERSION 2)
 set(SDL_MINOR_VERSION 0)
-set(SDL_MICRO_VERSION 9)
+set(SDL_MICRO_VERSION 10)
 set(SDL_INTERFACE_AGE 0)
-set(SDL_BINARY_AGE 9)
+set(SDL_BINARY_AGE 10)
 set(SDL_VERSION "${SDL_MAJOR_VERSION}.${SDL_MINOR_VERSION}.${SDL_MICRO_VERSION}")
-# the following should match the versions in Xcode project file:
-set(DYLIB_CURRENT_VERSION 10.0.0)
-set(DYLIB_COMPATIBILITY_VERSION 1.0.0)
 
-# Urho3D - commented out CMAKE_DEBUG_POSTFIX configuration as our build system deos not not expose SDL as a library
+# Urho3D - commented out DYLIB's current_version and compatibility_version variables as we always build SDL as STATIC
+
+# Urho3D - commented out SDL_CMAKE_DEBUG_POSTFIX configuration as our build system does not not expose SDL as a library
 
 # Calculate a libtool-like version number
 math(EXPR LT_CURRENT "${SDL_MICRO_VERSION} - ${SDL_INTERFACE_AGE}")
@@ -180,37 +179,6 @@ endif()
 set (SDL_LIBS)
 set (SDL_CFLAGS)
 
-if(MSVC)
-  option(FORCE_STATIC_VCRT "Force /MT for static VC runtimes" OFF)
-  if(FORCE_STATIC_VCRT)
-    foreach(flag_var
-        CMAKE_C_FLAGS CMAKE_C_FLAGS_DEBUG CMAKE_C_FLAGS_RELEASE
-        CMAKE_C_FLAGS_MINSIZEREL CMAKE_C_FLAGS_RELWITHDEBINFO)
-      if(${flag_var} MATCHES "/MD")
-        string(REGEX REPLACE "/MD" "/MT" ${flag_var} "${${flag_var}}")
-      endif()
-    endforeach()
-  endif()
-
-  # Make sure /RTC1 is disabled, otherwise it will use functions from the CRT
-  foreach(flag_var
-      CMAKE_C_FLAGS CMAKE_C_FLAGS_DEBUG CMAKE_C_FLAGS_RELEASE
-      CMAKE_C_FLAGS_MINSIZEREL CMAKE_C_FLAGS_RELWITHDEBINFO)
-    string(REGEX REPLACE "/RTC(su|[1su])" "" ${flag_var} "${${flag_var}}")
-  endforeach(flag_var)
-endif()
-
-# Those are used for pkg-config and friends, so that the SDL2.pc, sdl2-config,
-# etc. are created correctly.
-set(SDL_LIBS "-lSDL2")
-set(SDL_CFLAGS "")
-
-# When building shared lib for Windows with MinGW,
-# avoid the DLL having a "lib" prefix
-if(WINDOWS)
-  set(CMAKE_SHARED_LIBRARY_PREFIX "")
-endif()
-
 # Emscripten toolchain has a nonempty default value for this, and the checks
 # in this file need to change that, so remember the original value, and
 # restore back to that afterwards. For check_function_exists() to work in
@@ -256,12 +224,12 @@ if(EMSCRIPTEN)
   # loading architecture, low-level CPU inspection or multithreading.
   set(OPT_DEF_ASM FALSE)
   set(SDL_SHARED_ENABLED_BY_DEFAULT OFF)
-  # Urho3D - leave SDL_ATOMIC and SDL_LOADSO enable for Emscripten
+  # Urho3D - leave all the other subsystems enable by default
   set(SDL_THREADS_ENABLED_BY_DEFAULT OFF)
-  set(SDL_CPUINFO_ENABLED_BY_DEFAULT OFF)
 endif()
 
 # Urho3D - we always build internal sub-libraries as STATIC library type, so this build option is not applicable to us
+set (SDL_STATIC_ENABLED_BY_DEFAULT ON)
 set (SDL_SHARED_ENABLED_BY_DEFAULT OFF)
 # Urho3D - we prefer to disable 2D render subsystem by default
 if (NOT DEFINED SDL_RENDER_ENABLED_BY_DEFAULT)
@@ -330,17 +298,16 @@ set (RPATH TRUE)
 # Urho3D - prefer clock_gettime() when it is available
 dep_option(CLOCK_GETTIME       "Use clock_gettime() instead of gettimeofday()" ON "NOT WINDOWS" OFF)
 set_option(INPUT_TSLIB         "Use the Touchscreen library for input" ${UNIX_SYS})
-set_option(VIDEO_WAYLAND       "Use Wayland video driver" ${UNIX_SYS})
-dep_option(WAYLAND_SHARED      "Dynamically load Wayland support" ON "VIDEO_WAYLAND" OFF)
+dep_option(VIDEO_WAYLAND       "Use Wayland video driver" ON UNIX_SYS OFF)
+dep_option(WAYLAND_SHARED      "Dynamically load Wayland support" ON VIDEO_WAYLAND OFF)
 # Urho3D - change the VIDEO_WAYLAND_QT_TOUCH default value to FALSE (this is only needed by Sailfish[?] but we don't know way to auto-detect that yet)
 dep_option(VIDEO_WAYLAND_QT_TOUCH  "QtWayland server support for Wayland video driver" OFF VIDEO_WAYLAND OFF)
 # Urho3D - only make VIDEO_RPI option available on Raspberry-Pi platform
 dep_option(VIDEO_RPI           "Use Raspberry Pi video driver" ON RPI OFF)
 # Urho3D - bug fix - make VIDEO_X11 build option available for desktop UNIX (including OSX) only
 dep_option(VIDEO_X11           "Use X11 video driver" ON "UNIX_SYS OR APPLE\;NOT RPI AND NOT IOS AND NOT TVOS" OFF)
-dep_option(X11_SHARED          "Dynamically load X11 support" ON "VIDEO_X11" OFF)
-set(SDL_X11_OPTIONS Xcursor Xinerama XInput Xrandr Xscrnsaver XShape Xvm)
-foreach(_SUB ${SDL_X11_OPTIONS})
+dep_option(X11_SHARED          "Dynamically load X11 support" ON VIDEO_X11 OFF)
+foreach(_SUB Xcursor Xinerama XInput Xrandr Xscrnsaver XShape Xvm)
   string(TOUPPER "VIDEO_X11_${_SUB}" _OPT)
   dep_option(${_OPT}           "Enable ${_SUB} support" ON VIDEO_X11 OFF)
 endforeach()
@@ -353,6 +320,7 @@ if (WINDOWS)
 else ()
   set (DIRECTX OFF)  # Make it off explicitly when not targeting Windows platform, just in case user passes it in accidentally via CLI
 endif ()
+dep_option(WASAPI              "Use the Windows WASAPI audio driver" ON WINDOWS OFF)
 # Urho3D - commented out RENDER_D3D as an option to avoid potential conflict with our URHO3D_OPENGL and URHO3D_D3D11 build options on Windows platform
 #          Instead just initialize the variable according to our build options; Urho3D also by default disables the SDL renderer subsystem
 if (WINDOWS)
@@ -362,21 +330,19 @@ if (WINDOWS)
     set (RENDER_D3D TRUE)
   endif ()
 endif ()
-set_option(WASAPI              "Use the Windows WASAPI audio driver" ${WINDOWS})
-set_option(VIDEO_VIVANTE       "Use Vivante EGL video driver" ${UNIX_SYS})
+dep_option(VIDEO_VIVANTE       "Use Vivante EGL video driver" ON UNIX_SYS OFF)
 dep_option(VIDEO_VULKAN        "Enable Vulkan support" ON "ANDROID OR APPLE OR LINUX OR WINDOWS" OFF)
-set_option(VIDEO_KMSDRM        "Use KMS DRM video driver" ${UNIX_SYS})
-dep_option(KMSDRM_SHARED       "Dynamically load KMS DRM support" ON "VIDEO_KMSDRM" OFF)
-option_string(BACKGROUNDING_SIGNAL "number to use for magic backgrounding signal or 'OFF'" "OFF")
-option_string(FOREGROUNDING_SIGNAL "number to use for magic foregrounding signal or 'OFF'" "OFF")
+dep_option(VIDEO_KMSDRM        "Use KMS DRM video driver" ON UNIX_SYS OFF)
+dep_option(KMSDRM_SHARED       "Dynamically load KMS DRM support" ON VIDEO_KMSDRM OFF)
+option_string(BACKGROUNDING_SIGNAL "number to use for magic backgrounding signal or 'OFF'" OFF)
+option_string(FOREGROUNDING_SIGNAL "number to use for magic foregrounding signal or 'OFF'" OFF)
 
-# TODO: We should (should we?) respect cmake's ${BUILD_SHARED_LIBS} flag here
-# The options below are for compatibility to configure's default behaviour.
 set(SDL_SHARED ${SDL_SHARED_ENABLED_BY_DEFAULT} CACHE BOOL "Build a shared version of the library")
-set(SDL_STATIC ON CACHE BOOL "Build a static version of the library")
+set(SDL_STATIC ${SDL_STATIC_ENABLED_BY_DEFAULT} CACHE BOOL "Build a static version of the library")
 
 dep_option(SDL_STATIC_PIC      "Static version of the library should be built with Position Independent Code" OFF "SDL_STATIC" OFF)
-set_option(SDL_TEST            "Build the test directory" OFF)
+
+# Urho3D - remove option to build the test directory
 
 # General source files
 set (SOURCE_FILE_PATTERNS
@@ -397,10 +363,10 @@ endforeach ()
 if (SDL_RENDER)
   list (APPEND SOURCE_FILE_PATTERNS ${SDL2_SOURCE_DIR}/src/render/*/*.c)   # Recurse one more level
 endif ()
-if (SDL_VIDEO) # Urho3D: Added video/yuv2rgb sources
+if (SDL_VIDEO)
   list (APPEND SOURCE_FILE_PATTERNS ${SDL2_SOURCE_DIR}/src/video/yuv2rgb/*.c)
 endif ()
-file(GLOB SOURCE_FILES ${SOURCE_FILE_PATTERNS})
+file (GLOB SOURCE_FILES ${SOURCE_FILE_PATTERNS})
 
 if(ASSERTIONS STREQUAL "auto")
   # Do nada - use optimization settings to determine the assertion level
@@ -436,6 +402,11 @@ if(USE_GCC OR USE_CLANG)
       #          However, when we do then it must be moved to our common module and/or just commented out
       set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-multichar")
     endif()
+  endif()
+
+  check_c_compiler_flag(-fno-strict-aliasing HAVE_GCC_NO_STRICT_ALIASING)
+  if(HAVE_GCC_NO_STRICT_ALIASING)
+    list(APPEND EXTRA_CFLAGS "-fno-strict-aliasing")
   endif()
 
   check_c_compiler_flag(-Wdeclaration-after-statement HAVE_GCC_WDECLARATION_AFTER_STATEMENT)
@@ -506,6 +477,8 @@ if(ASSEMBLY)
     # Urho3D - bug fix - do not use "-mfpmath=387" in EXTRA_CFLAGS, instead let the compiler to choose what's the best by itself (i.e. '387' for x86 and 'sse' for x86_64) and also to keep SDL library being built with the same option as Urho3D library and all the other 3rd-party sub-libraries; besides the '387' is invalid when targeting arm64
 
     # Urho3D - commented out the HAVE_SSEMATH variable as it is not being used anywhere currently; furthermore compiler already emits __SSE_MATH__ or __SSE2_MATH__ as necessary on x86_64 ABI only; so instead of using HAVE_SSEMATH variable, we should actually use the __SSE_MATH__ or __SSE2_MATH__ compiler define if that is the original intention of having this variable
+
+    check_include_file("immintrin.h" HAVE_IMMINTRIN_H)
 
     if(URHO3D_ALTIVEC)
       set(SDL_ALTIVEC_BLITTERS 1)
@@ -579,7 +552,7 @@ if(LIBC)
     #          However, AppleClang when targeting iOS/tvOS platform can only find these headers correctly AFTER applying a CMake hack from our common module to workaround a CMake bug so that try_compile() command works well on iOS/tvOS platform
     foreach(_HEADER
             stdio.h stdlib.h stddef.h stdarg.h malloc.h memory.h string.h limits.h
-            strings.h wchar.h inttypes.h stdint.h ctype.h math.h iconv.h signal.h libunwind.h)
+            strings.h wchar.h inttypes.h stdint.h ctype.h math.h iconv.h signal.h)  # Urho3D - exclude libunwind.h that is only used for testing code which we don't include
       string(TOUPPER "HAVE_${_HEADER}" _UPPER)
       string(REPLACE "." "_" _HAVE_H ${_UPPER})
       check_include_file("${_HEADER}" ${_HAVE_H})
@@ -653,6 +626,7 @@ foreach(_SUB ${SDL_SUBSYSTEMS})
     set(SDL_${_OPT}_DISABLED 1)
   endif()
 endforeach()
+# Urho3D - move the individual subsystem check to "General source files" block above
 
 # General SDL subsystem options, valid for all platforms
 if(SDL_AUDIO)
@@ -782,6 +756,15 @@ if(ANDROID)
       message(STATUS "Vulkan doesn't work on this configuration")
     endif()
   endif()
+
+  # Urho3D - import 'cpufeatures' from Android NDK
+  if (SDL_CPUINFO)
+    # This is a hack - intentionally do not depend on the 'cpufeatures' as separate built target with android_ndk_import_module_cpufeatures macro from NDK
+    list (APPEND INCLUDE_DIRS ${ANDROID_NDK}/sources/android/cpufeatures)
+    list (APPEND SOURCE_FILES ${ANDROID_NDK}/sources/android/cpufeatures/cpu-features.c)
+  endif ()
+
+  file(GLOB ANDROID_HIDAPI_SOURCES ${SDL2_SOURCE_DIR}/src/hidapi/android/*.cpp)
 elseif(EMSCRIPTEN)
   # Hide noisy warnings that intend to aid mostly during initial stages of porting a new
   # project. Uncomment at will for verbose cross-compiling -I/../ path info.
@@ -940,6 +923,16 @@ elseif(APPLE)
     list(APPEND EXTRA_LIBS ${AUDIOTOOLBOX})
   endif()
 
+  # Urho3d - sync with SDL_config_iphoneos.h
+  if (SDL_SENSOR)
+    if (IOS)
+      set(SDL_SENSOR_COREMOTION 1)
+      set(HAVE_SDL_SENSORS TRUE)
+      file(GLOB COREMOTION_SOURCES ${SDL2_SOURCE_DIR}/src/sensor/coremotion/*.m)
+      set(SOURCE_FILES ${SOURCE_FILES} ${COREMOTION_SOURCES})
+    endif ()
+  endif ()
+
   # Urho3d - bug fix - make it work for iOS/tvOS platform
   if(SDL_VIDEO)
     if (VIDEO_COCOA)
@@ -960,6 +953,22 @@ elseif(APPLE)
       set (SDL_VIDEO_RENDER_OGL_ES 1)
       set (SDL_VIDEO_RENDER_OGL_ES2 1)
       set (HAVE_VIDEO_OPENGLES TRUE)
+
+      # Urho3D - Metal supported on 64-bit devices running iOS 8.0 and tvOS 9.0 and newer
+      CHECK_C_SOURCE_COMPILES ("
+      #if (__IPHONE_OS_VERSION_MIN_REQUIRED < 80000) || (__TV_OS_VERSION_MIN_REQUIRED < 90000)
+      #error Metal doesn't work on this target platform
+      #endif
+      int main()
+      {
+          return 0;
+      }
+      " PASSED_METAL_CHECKS)
+      if (PASSED_METAL_CHECKS)
+        set (SDL_VIDEO_RENDER_METAL 1)
+      else ()
+        set (VIDEO_VULKAN OFF)
+      endif ()
     else ()
       CheckOpenGL ()
       CheckOpenGLES ()
@@ -1124,6 +1133,7 @@ elseif(UNIX)    # Urho3D - at this point both UNIX and UNIX_SYS should be equiva
       set (SDL_USE_IME 1)
     endif ()
 
+    # Urho3D - comment out HAVE_LIBUNWIND_H check as it is always false in our case
     # Urho3D - bug fix - use find_path() to detect fcitx's header file so it works for both native and cross-compiling builds
     find_path (FCITX_H_INCLUDE_DIRS fcitx/frontend.h)
     if (FCITX_H_INCLUDE_DIRS)

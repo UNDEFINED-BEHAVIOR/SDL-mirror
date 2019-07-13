@@ -288,6 +288,8 @@
 #cmakedefine SDL_JOYSTICK_WINMM @SDL_JOYSTICK_WINMM@
 #cmakedefine SDL_JOYSTICK_USBHID @SDL_JOYSTICK_USBHID@
 #cmakedefine SDL_JOYSTICK_USBHID_MACHINE_JOYSTICK_H @SDL_JOYSTICK_USBHID_MACHINE_JOYSTICK_H@
+// Urho3D - sync with SDL_config.h.in
+#cmakedefine SDL_JOYSTICK_HIDAPI @SDL_JOYSTICK_HIDAPI@
 #cmakedefine SDL_JOYSTICK_EMSCRIPTEN @SDL_JOYSTICK_EMSCRIPTEN@
 #cmakedefine SDL_HAPTIC_DUMMY @SDL_HAPTIC_DUMMY@
 #cmakedefine SDL_HAPTIC_LINUX @SDL_HAPTIC_LINUX@
@@ -299,6 +301,8 @@
 /* Enable various sensor drivers */
 #cmakedefine SDL_SENSOR_ANDROID @SDL_SENSOR_ANDROID@
 #cmakedefine SDL_SENSOR_DUMMY @SDL_SENSOR_DUMMY@
+// Urho3D - sync with SDL_config_iphoneos.h
+#cmakedefine SDL_SENSOR_COREMOTION @SDL_SENSOR_COREMOTION@
 
 /* Enable various shared object loading systems */
 #cmakedefine SDL_LOADSO_DLOPEN @SDL_LOADSO_DLOPEN@

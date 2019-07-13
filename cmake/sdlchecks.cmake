@@ -422,7 +422,7 @@ macro(CheckX11)
       get_soname (${UPCASE_NAME}_LIB_SONAME ${UPCASE_NAME}_LIB)
     endforeach ()
 
-    # Urho3D - commented out setting of X_CFLAGS based on the search result for X11/Xlib.h using the default search path (if it is found then it is in default path anyway so no point to add it into compiler header search path again)
+    # Urho3D - commented out setting of EXTRA_CFLAGS based on the search result for X11/Xlib.h using the default search path (if it is found then it is in default path anyway so no point to add it into compiler header search path again)
     # Urho3D - add check for Xdbe extension
 
     check_include_file(X11/Xcursor/Xcursor.h HAVE_XCURSOR_H)
@@ -1061,7 +1061,6 @@ macro(CheckRPI)
       file(GLOB VIDEO_RPI_SOURCES ${SDL2_SOURCE_DIR}/src/video/raspberry/*.c)
       set(SOURCE_FILES ${SOURCE_FILES} ${VIDEO_RPI_SOURCES})
       list (APPEND EXTRA_LIBS bcm_host)
-      list(APPEND EXTRA_LDFLAGS ${VIDEO_RPI_LDFLAGS})
     endif(SDL_VIDEO AND HAVE_VIDEO_RPI)
   endif(VIDEO_RPI)
 endmacro(CheckRPI)

@@ -89,7 +89,9 @@ static SDL_Scancode
 VKeytoScancode(WPARAM vkey)
 {
     switch (vkey) {
+/* Windows generates this virtual keycode for Keypad 5 when NumLock is off.
     case VK_CLEAR: return SDL_SCANCODE_CLEAR;
+*/
     case VK_MODECHANGE: return SDL_SCANCODE_MODE;
     case VK_SELECT: return SDL_SCANCODE_SELECT;
     case VK_EXECUTE: return SDL_SCANCODE_EXECUTE;
@@ -434,13 +436,12 @@ WIN_WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             POINT cursorPos;
             BOOL minimized;
 
-            /* Don't mark the window as shown if it's activated before being shown */
-            if (!IsWindowVisible(hwnd)) {
-                break;
-            }
-
             minimized = HIWORD(wParam);
             if (!minimized && (LOWORD(wParam) != WA_INACTIVE)) {
+                /* Don't mark the window as shown if it's activated before being shown */
+                if (!IsWindowVisible(hwnd)) {
+                    break;
+                }
                 if (LOWORD(wParam) == WA_CLICKACTIVE) {
                     if (GetAsyncKeyState(VK_LBUTTON)) {
                         data->focus_click_pending |= SDL_BUTTON_LMASK;
@@ -540,9 +541,10 @@ WIN_WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             data->in_title_click = SDL_FALSE;
 
             mouse = SDL_GetMouse();
-            if (!emulatedMouse && (!mouse->relative_mode || mouse->relative_mode_warp)) {    // Urho3D
-                SDL_MouseID mouseID = (((GetMessageExtraInfo() & MOUSEEVENTF_FROMTOUCH) == MOUSEEVENTF_FROMTOUCH) ? SDL_TOUCH_MOUSEID : 0);
-                WIN_CheckWParamMouseButtons(wParam, data, mouseID);
+            if (!mouse->relative_mode || mouse->relative_mode_warp) {
+                if ((GetMessageExtraInfo() & MOUSEEVENTF_FROMTOUCH) != MOUSEEVENTF_FROMTOUCH) {
+                    WIN_CheckWParamMouseButtons(wParam, data, 0);
+                }
             }
         }
         break;

@@ -49,6 +49,7 @@ static int exit_status;
 // Urho3D: added variables
 const char* resource_dir = 0;
 const char* documents_dir = 0;
+
 #if defined(SDL_MAIN_NEEDED) && !defined(IOS_DYLIB)
 /* SDL is being built as a static library, include main() */
 int main(int argc, char *argv[])
@@ -394,6 +395,7 @@ SDL_LoadLaunchImageNamed(NSString *name, int screenh)
         window.alpha = 0.0;
     } completion:^(BOOL finished) {
         window.hidden = YES;
+        UIKit_ForceUpdateHomeIndicator(); /* Wait for launch screen to hide so settings are applied to the actual view controller. */
     }];
 }
 
